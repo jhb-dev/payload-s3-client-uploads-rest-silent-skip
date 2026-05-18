@@ -64,11 +64,13 @@ export type SupportedTimezones =
 export interface Config {
   auth: {
     users: UserAuthOperations;
+    'api-keys': ApiKeyAuthOperations;
   };
   blocks: {};
   collections: {
     users: User;
     media: Media;
+    'api-keys': ApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +80,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    'api-keys': ApiKeysSelect<false> | ApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -93,13 +96,31 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: User | ApiKey;
   jobs: {
     tasks: unknown;
     workflows: unknown;
   };
 }
 export interface UserAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
+  };
+}
+export interface ApiKeyAuthOperations {
   forgotPassword: {
     email: string;
     password: string;
@@ -163,6 +184,70 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+  sizes?: {
+    xs?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    sm?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    md?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    lg?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    xl?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    og?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-keys".
+ */
+export interface ApiKey {
+  id: string;
+  type: 'website' | 'agent';
+  updatedAt: string;
+  createdAt: string;
+  enableAPIKey?: boolean | null;
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
+  collection: 'api-keys';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -195,12 +280,21 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'api-keys';
+        value: string | ApiKey;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: string | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'api-keys';
+        value: string | ApiKey;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -210,10 +304,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: string;
-  user: {
-    relationTo: 'users';
-    value: string | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'api-keys';
+        value: string | ApiKey;
+      };
   key?: string | null;
   value?:
     | {
@@ -280,6 +379,82 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+  sizes?:
+    | T
+    | {
+        xs?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        sm?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        md?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        lg?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        xl?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        og?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+      };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "api-keys_select".
+ */
+export interface ApiKeysSelect<T extends boolean = true> {
+  type?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  enableAPIKey?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

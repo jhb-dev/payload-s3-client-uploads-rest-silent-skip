@@ -14,8 +14,6 @@ services:
       driver: none
 
   # Minio is an S3-compatible bucket — used as the storage-s3 target.
-  # The reproduction script pre-populates one object in this bucket so the
-  # silent-skip path has something to fetch with the staticHandler.
   minio:
     image: minio/minio:latest
     ports:
@@ -27,7 +25,8 @@ services:
     volumes:
       - minio-data:/data
 
-  # Creates the bucket and seeds one object on minio startup.
+  # Creates the bucket on minio startup so the reproduction has a place
+  # to (not) upload to.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -36,7 +35,6 @@ services:
       sh -c "
       until /usr/bin/mc alias set local http://minio:9000 test testtest123; do sleep 1; done;
       /usr/bin/mc mb --ignore-existing local/payload-repro-bucket;
-      printf '%s' 'preexisting blob content' | /usr/bin/mc pipe local/payload-repro-bucket/preexisting.bin;
       exit 0;
       "
 

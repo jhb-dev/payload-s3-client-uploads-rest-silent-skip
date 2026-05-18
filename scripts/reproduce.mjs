@@ -1,16 +1,18 @@
-// Variant repro: client POSTs `file` as a JSON metadata string referencing
-// a filename that DOES exist in S3 (because the client uploaded it via the
-// signed-URL flow, or because some leftover object exists). The metadata
-// path triggers addDataAndFileToRequest.js:52-95 — staticHandler fetches
-// the (pre-existing) object, req.file gets the buffer + clientUploadContext,
-// and afterChange.js then filters that file out (clientUploadContext set),
-// so the server never re-uploads.
+// Reproduction: POST /api/<upload-slug> with a binary file blob and a
+// `?select[…]` query that projects `mimeType` out of the result doc.
 //
-// Crucial: `size` in the metadata is what ends up as doc.filesize, even if
-// the actual S3 object is a different size. That matches the reported
-// "filesize: 5000 but real file is 5592 bytes" symptom.
+// Result: 201 with a created doc; bucket gets no object.
+//
+// Root cause: the `doc` passed through hooks is the select-projected doc.
+// `@payloadcms/plugin-cloud-storage/src/utilities/getIncomingFiles.ts`
+// requires both `data.filename` AND `data.mimeType` to be truthy. When
+// `mimeType` is projected out, getIncomingFiles returns []; afterChange
+// has nothing to upload; adapter.handleUpload is never called.
+
+import { readFile } from 'node:fs/promises'
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000'
+const FILE_PATH = process.env.FILE_PATH || './test.webp'
 
 const log = (label, data) =>
   console.log(`\n=== ${label} ===\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`)
@@ -43,38 +45,44 @@ async function ensureAdminWithApiKey() {
   return apiKey
 }
 
-async function postMetadataOnly(apiKey) {
-  // The S3 object already exists (pre-populated as `preexisting.png`, 13 bytes).
-  // We lie about its size — claim 5000 bytes — to mimic the symptom.
-  // Use a non-image mime type so sharp doesn't run on the (fake) S3 content
-  // we fetch back. The bug is about the upload step being skipped — sharp
-  // processing is incidental and would just fail on the placeholder bytes.
-  const fileMetadata = {
-    clientUploadContext: { uploaded: true },
-    collectionSlug: 'media',
-    filename: 'preexisting.bin',
-    mimeType: 'application/octet-stream',
-    size: 5000,
-  }
-
+async function upload({ apiKey, filename, useSelect }) {
+  const buffer = await readFile(FILE_PATH)
   const fd = new FormData()
-  fd.append('file', JSON.stringify(fileMetadata))
-  fd.append('_payload', JSON.stringify({ alt: 'metadata-only, file already in S3' }))
+  fd.append('file', new Blob([buffer], { type: 'image/webp' }), filename)
 
-  const res = await fetch(`${BASE}/api/media`, {
+  const query = useSelect
+    ? '?select[id]=true&select[filename]=true&select[filesize]=true'
+    : ''
+  const res = await fetch(`${BASE}/api/media${query}`, {
     method: 'POST',
     headers: { Authorization: `users API-Key ${apiKey}` },
     body: fd,
   })
-  const json = await res.json().catch(() => null)
-  log(`POST /api/media -> ${res.status}`, json)
-  return json?.doc ?? json
+  const body = await res.json().catch(() => null)
+  return { status: res.status, doc: body?.doc ?? body }
 }
 
 const apiKey = await ensureAdminWithApiKey()
-const doc = await postMetadataOnly(apiKey)
-console.log('\n--- Summary ---')
-console.log('Doc ID:       ', doc?.id)
-console.log('Doc filename: ', doc?.filename)
-console.log('Doc filesize: ', doc?.filesize, '(metadata said 5000; actual S3 object is 13 bytes)')
-console.log('Doc url:      ', doc?.url)
+const ts = Date.now()
+
+const broken = await upload({
+  apiKey,
+  filename: `bug-with-select-${ts}.webp`,
+  useSelect: true,
+})
+log(`WITH ?select[…] (broken) → ${broken.status}`, broken.doc)
+
+const working = await upload({
+  apiKey,
+  filename: `ok-without-select-${ts}.webp`,
+  useSelect: false,
+})
+log(`WITHOUT select (control) → ${working.status}`, {
+  filename: working.doc?.filename,
+  filesize: working.doc?.filesize,
+})
+
+console.log('\n--- Now check the bucket ---')
+console.log('  Expected: only the second filename (ok-without-select-…) is present.')
+console.log('  Actual:   the first (bug-with-select-…) is missing despite the 201.')
+console.log('\n  Run: docker exec repro-minio mc ls local/payload-repro-bucket')
